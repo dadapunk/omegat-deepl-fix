@@ -54,6 +54,33 @@ export OMEGAT_DIR=~/.local/opt/omegat/OmegaT_6.0.1_Without_JRE
 ./build.sh
 ```
 
+### Manual patch (no script)
+
+If you prefer to apply the patch by hand:
+
+```bash
+# 1. Backup
+cp "$OMEGAT_DIR/OmegaT.jar" "$OMEGAT_DIR/OmegaT.jar.bak"
+
+# 2. Build classpath (OmegaT.jar + all jars in lib/)
+CLASSPATH="$OMEGAT_DIR/OmegaT.jar"
+for jar in "$OMEGAT_DIR"/lib/*.jar; do
+    CLASSPATH="$CLASSPATH:$jar"
+done
+
+# 3. Compile
+javac -cp "$CLASSPATH" patch/org/omegat/core/machinetranslators/DeepLTranslate.java
+
+# 4. Patch the JAR
+jar uf "$OMEGAT_DIR/OmegaT.jar" \
+  -C patch org/omegat/core/machinetranslators/DeepLTranslate.class
+
+# 5. Verify
+jar tf "$OMEGAT_DIR/OmegaT.jar" | grep DeepLTranslate.class
+```
+
+**Requirements:** JDK 11+ (`javac` and `jar`)
+
 ### Verify the patch
 
 ```bash
