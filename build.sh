@@ -1,15 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "${1:-}" = "--omegat-dir" ] && [ -n "${2:-}" ]; then
-    OMEGAT_DIR="$2"
-else
-    OMEGAT_DIR="${OMEGAT_DIR:-${1:-}}"
+DRY_RUN=""
+POSITIONAL=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --dry-run) DRY_RUN="1"; shift ;;
+        --omegat-dir) OMEGAT_DIR="$2"; shift 2 ;;
+        --help|-h) HELP="1"; shift ;;
+        *) POSITIONAL+=("$1"); shift ;;
+    esac
+done
+
+if [ -z "${OMEGAT_DIR:-}" ] && [ ${#POSITIONAL[@]} -gt 0 ]; then
+    OMEGAT_DIR="${POSITIONAL[0]}"
 fi
 
-if [ -z "$OMEGAT_DIR" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    echo "Usage: $0 --omegat-dir /path/to/OmegaT"
-    echo "   or: OMEGAT_DIR=/path/to/OmegaT $0"
+if [ -z "${OMEGAT_DIR:-}" ] || [ -n "${HELP:-}" ]; then
+    echo "Usage: $0 [--dry-run] --omegat-dir /path/to/OmegaT"
+    echo "   or: $0 [--dry-run] /path/to/OmegaT"
+    echo "   or: OMEGAT_DIR=/path/to/OmegaT $0 [--dry-run]"
+    echo ""
+    echo "Options:"
+    echo "  --dry-run    Show what would be done without making changes"
     echo ""
     echo "Common paths:"
     echo "  Linux (manual):  ~/.local/opt/omegat/OmegaT_6.0.1_Without_JRE"
@@ -18,20 +31,61 @@ if [ -z "$OMEGAT_DIR" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     exit 1
 fi
 
-command -v javac >/dev/null 2>&1 || { echo "Error: javac not found (install JDK 11+)"; exit 1; }
-command -v jar >/dev/null 2>&1   || { echo "Error: jar not found (install JDK 11+)"; exit 1; }
+if [ -n "$DRY_RUN" ]; then
+    echo "[*] DRY RUN — no changes will be made"
+    echo ""
+fi
 
-[ -d "$OMEGAT_DIR" ]            || { echo "Error: directory not found: $OMEGAT_DIR"; exit 1; }
-[ -f "$OMEGAT_DIR/OmegaT.jar" ] || { echo "Error: OmegaT.jar not found in $OMEGAT_DIR"; exit 1; }
-[ -d "$OMEGAT_DIR/lib" ]        || { echo "Error: lib/ directory not found in $OMEGAT_DIR"; exit 1; }
+echo "[CHECK] javac..."
+command -v javac >/dev/null 2>&1 || { echo "  FAIL: javac not found (install JDK 11+)"; exit 1; }
+echo "  FOUND: $(command -v javac)"
+
+echo "[CHECK] jar..."
+command -v jar >/dev/null 2>&1 || { echo "  FAIL: jar not found (install JDK 11+)"; exit 1; }
+echo "  FOUND: $(command -v jar)"
+
+echo "[CHECK] OmegaT directory..."
+[ -d "$OMEGAT_DIR" ] || { echo "  FAIL: directory not found: $OMEGAT_DIR"; exit 1; }
+echo "  OK: $OMEGAT_DIR"
+
+echo "[CHECK] OmegaT.jar..."
+[ -f "$OMEGAT_DIR/OmegaT.jar" ] || { echo "  FAIL: OmegaT.jar not found"; exit 1; }
+echo "  OK: $OMEGAT_DIR/OmegaT.jar"
+
+echo "[CHECK] lib/ directory..."
+[ -d "$OMEGAT_DIR/lib" ] || { echo "  FAIL: lib/ not found"; exit 1; }
+JAR_COUNT=$(ls -1 "$OMEGAT_DIR"/lib/*.jar 2>/dev/null | wc -l)
+echo "  OK: $JAR_COUNT jars found"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PATCH_FILE="$SCRIPT_DIR/patch/org/omegat/core/machinetranslators/DeepLTranslate.java"
-[ -f "$PATCH_FILE" ] || { echo "Error: patch source not found: $PATCH_FILE"; exit 1; }
+echo "[CHECK] patch source..."
+[ -f "$PATCH_FILE" ] || { echo "  FAIL: patch source not found: $PATCH_FILE"; exit 1; }
+echo "  OK: $PATCH_FILE"
 
+echo "[CHECK] OmegaT running..."
 if command -v lsof >/dev/null 2>&1 && lsof "$OMEGAT_DIR/OmegaT.jar" >/dev/null 2>&1; then
-    echo "Error: OmegaT is running. Close it before patching."
+    echo "  FAIL: OmegaT is running. Close it before patching."
     exit 1
+fi
+echo "  OK: not running"
+
+CLASSPATH="$OMEGAT_DIR/OmegaT.jar"
+for jar in "$OMEGAT_DIR"/lib/*.jar; do
+    CLASSPATH="$CLASSPATH:$jar"
+done
+
+echo ""
+echo "Plan:"
+echo "  1. Backup:  $OMEGAT_DIR/OmegaT.jar -> OmegaT.jar.bak.<timestamp>"
+echo "  2. Compile: javac -cp <classpath> $PATCH_FILE"
+echo "  3. Patch:   jar uf $OMEGAT_DIR/OmegaT.jar .../DeepLTranslate.class"
+echo "  4. Verify:  jar tf $OMEGAT_DIR/OmegaT.jar | grep DeepLTranslate.class"
+
+if [ -n "$DRY_RUN" ]; then
+    echo ""
+    echo "[*] DRY RUN complete — no changes were made."
+    exit 0
 fi
 
 BACKUP="$OMEGAT_DIR/OmegaT.jar.bak.$(date +%Y%m%d%H%M%S)"
@@ -40,11 +94,6 @@ echo "[*] Backup created: $BACKUP"
 
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
-
-CLASSPATH="$OMEGAT_DIR/OmegaT.jar"
-for jar in "$OMEGAT_DIR"/lib/*.jar; do
-    CLASSPATH="$CLASSPATH:$jar"
-done
 
 cp -r "$SCRIPT_DIR/patch"/* "$TMPDIR/"
 javac -cp "$CLASSPATH" "$TMPDIR"/org/omegat/core/machinetranslators/DeepLTranslate.java
