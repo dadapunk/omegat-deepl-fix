@@ -19,7 +19,8 @@ import org.omegat.util.Preferences;
 
 public class DeepLTranslate extends BaseCachedTranslate {
     protected static final String PROPERTY_API_KEY = "deepl.api.key";
-    protected static final String DEEPL_URL = "https://api-free.deepl.com/v2/translate";
+    protected static final String DEEPL_API_HOST = System.getenv().getOrDefault("DEEPL_API_HOST", "api-free.deepl.com");
+    protected static final String DEEPL_URL = "https://" + DEEPL_API_HOST + "/v2/translate";
     private final static int MAX_TEXT_LENGTH = 5000;
 
     @Override

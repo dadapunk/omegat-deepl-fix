@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OMEGAT_DIR="${OMEGAT_DIR:-${1:-}}"
+if [ "${1:-}" = "--omegat-dir" ] && [ -n "${2:-}" ]; then
+    OMEGAT_DIR="$2"
+else
+    OMEGAT_DIR="${OMEGAT_DIR:-${1:-}}"
+fi
 
 if [ -z "$OMEGAT_DIR" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     echo "Usage: $0 --omegat-dir /path/to/OmegaT"
