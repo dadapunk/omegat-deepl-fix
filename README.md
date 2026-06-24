@@ -1,5 +1,7 @@
 # OmegaT DeepL Fix
 
+[![CI](https://github.com/dadapunk/omegat-deepl-fix/actions/workflows/ci.yml/badge.svg)](https://github.com/dadapunk/omegat-deepl-fix/actions/workflows/ci.yml)
+
 Patches OmegaT's built-in DeepLTranslate to use the modern DeepL API v2,
 fixing `403 Forbidden` errors on Free (`:fx`) API keys.
 
@@ -57,6 +59,22 @@ export OMEGAT_DIR=~/.local/opt/omegat/OmegaT_6.0.1_Without_JRE
 ```bash
 ./verify.sh --omegat-dir ~/.local/opt/omegat/OmegaT_6.0.1_Without_JRE
 ```
+
+### Configure OmegaT
+
+Once patched, open OmegaT and set your DeepL API key in the GUI:
+
+1. **Options → Preferences → Machine Translation**
+2. Tick the **DeepL** checkbox
+3. Paste your API key (e.g. `e41c2018-...:fx`)
+4. Click **OK**
+
+The key is persisted in OmegaT's config and survives OmegaT updates (the API key
+is stored separately from the JAR). Only the patch itself needs to be re-applied
+after an update.
+
+To confirm it works, open a project, click a segment, and check the Machine
+Translation pane for a translation.
 
 ### Restore the original
 
