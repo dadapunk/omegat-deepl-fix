@@ -13,6 +13,8 @@ git clone https://github.com/dadapunk/omegat-deepl-fix.git && cd omegat-deepl-fi
 
 Then in OmegaT: **Options → Preferences → Machine Translation** → enable DeepL, paste your API key.
 
+**Requires JDK 11+** (`javac` + `jar`) — a JRE alone is not enough to compile the patch.
+
 See `./build.sh --help` for other paths (macOS, Flatpak) and `--dry-run`.
 
 ## Disclaimer
