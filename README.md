@@ -8,14 +8,18 @@ Patches OmegaT's `DeepLTranslate` to use API v2, fixing `403 Forbidden` on Free 
 
 ```bash
 git clone https://github.com/dadapunk/omegat-deepl-fix.git && cd omegat-deepl-fix
-./build.sh --omegat-dir ~/.local/opt/omegat/OmegaT_6.0.1_Without_JRE
+./build.sh --dry-run            # preview (auto-detects OmegaT)
+./build.sh                      # apply the patch
+```
+
+If auto-detect fails, pass the path manually:
+```bash
+./build.sh --omegat-dir /Applications/OmegaT.app/Contents/Java
 ```
 
 Then in OmegaT: **Options → Preferences → Machine Translation** → enable DeepL, paste your API key.
 
-**Requires JDK 11+** (`javac` + `jar`) — a JRE alone is not enough to compile the patch.
-
-See `./build.sh --help` for other paths (macOS, Flatpak) and `--dry-run`.
+Run `./build.sh --help` for all options. Add `--install-jdk` to auto-install Java if missing.
 
 ## Disclaimer
 
