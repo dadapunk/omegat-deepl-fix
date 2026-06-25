@@ -1,36 +1,36 @@
 # OmegaT DeepL Fix
 
-[![CI](https://github.com/dadapunk/omegat-deepl-fix/actions/workflows/ci.yml/badge.svg)](https://github.com/dadapunk/omegat-deepl-fix/actions/workflows/ci.yml)
-
 Fixes the "403 Forbidden" error in OmegaT's DeepL translator.
 
 ## Quick start
 
 ```bash
-./build.sh --dry-run          # preview
-./build.sh                    # patch OmegaT
+./fix.sh --dry-run          # preview
+./fix.sh                    # patch OmegaT
 ```
 
-The script finds OmegaT automatically. Press Enter to start.
+The script finds OmegaT automatically. No JDK required.
 
-## Restore
+## Other modes
 
 ```bash
-./restore.sh                  # undo the patch
-./restore.sh --choose         # pick a specific backup
+./fix.sh --check            # verify if patched
+./fix.sh --undo             # restore from latest backup
+./fix.sh --undo --choose    # pick a specific backup
 ```
 
-## Verify
+## Backward compat
 
 ```bash
-./verify.sh                   # check if OmegaT is patched
+./build.sh                  # same as ./fix.sh
+./verify.sh                 # same as ./fix.sh --check
+./restore.sh                # same as ./fix.sh --undo
 ```
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `build.sh` | Patch OmegaT |
-| `restore.sh` | Restore from backup |
-| `verify.sh` | Check patch status |
-| `patch/` | Modified source code |
+| `fix.sh` | Main script (build, check, undo) |
+| `build.sh` / `verify.sh` / `restore.sh` | Wrappers around fix.sh |
+| `patch/` | Modified source + precompiled class |
