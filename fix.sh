@@ -55,12 +55,16 @@ detect_omegat_dir() {
     candidates=()
     if [ "$OS" = "macos" ]; then
         [ -d "/Applications/OmegaT.app/Contents/Java" ] && candidates+=("/Applications/OmegaT.app/Contents/Java")
+        [ -d "$HOME/Applications/OmegaT.app/Contents/Java" ] && candidates+=("$HOME/Applications/OmegaT.app/Contents/Java")
     else
         for path in "$HOME/.local/opt/omegat"/OmegaT_* "$HOME/omegat"/OmegaT_* "/opt/omegat"/OmegaT_*; do
             [ -d "$path" ] && candidates+=("$path")
         done
         flatpak_dir="/var/lib/flatpak/app/org.omegat.OmegaT/current/active/files/omegat"
         [ -d "$flatpak_dir" ] && candidates+=("$flatpak_dir")
+    fi
+    if [ "${#candidates[@]}" -eq 0 ]; then
+        return 1
     fi
     for path in "${candidates[@]}"; do
         [ -f "$path/OmegaT.jar" ] && [ -d "$path/lib" ] && { OMEGAT_DIR="$path"; return 0; }
