@@ -68,15 +68,6 @@ detect_omegat_dir() {
     return 1
 }
 
-confirm() {
-    local q="$1" d="${2:-N}"
-    [ ! -t 0 ] && return 1
-    local s="[y/N]"; [ "$d" = "Y" ] && s="[Y/n]"
-    printf '%s %s ' "$q" "$s"
-    read -r a || true
-    case "${a:-$d}" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
-}
-
 cmd_check() {
     detect_omegat_dir || die "OmegaT not found. Open OmegaT once and run again."
     [ -f "$OMEGAT_DIR/OmegaT.jar" ] || die "OmegaT.jar not found"
@@ -145,10 +136,10 @@ cmd_build() {
 
     local TDIR
     TDIR=$(mktemp -d)
-    trap 'rm -rf "$TDIR"' EXIT
     mkdir -p "$TDIR/org/omegat/core/machinetranslators"
     cp "$PATCH_CLASS" "$TDIR/org/omegat/core/machinetranslators/DeepLTranslate.class"
     (cd "$TDIR" && zip -q "$OMEGAT_DIR/OmegaT.jar" org/omegat/core/machinetranslators/DeepLTranslate.class)
+    rm -rf "$TDIR"
 
     shopt -s nullglob
     local backups=("$OMEGAT_DIR"/OmegaT.jar.bak.*)

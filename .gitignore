@@ -1,4 +1,5 @@
 *.class
+!patch/org/omegat/core/machinetranslators/*.class
 *.jar
 *.zip
 *.tar.gz

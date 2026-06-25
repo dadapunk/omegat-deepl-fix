@@ -7,30 +7,38 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  check-class:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Download OmegaT for testing
+          distribution: temurin
+          java-version: 17
+      - name: Download OmegaT
         run: |
-          curl -sL -o /tmp/omegat.zip \
-            "https://sourceforge.net/projects/omegat/files/OmegaT%20-%20Standard/OmegaT%206.0.1/OmegaT_6.0.1_Without_JRE.zip/download"
-          mkdir -p /tmp/omegat
-          unzip -q /tmp/omegat.zip -d /tmp/omegat
-          echo "OMEGAT_DIR=/tmp/omegat/OmegaT_6.0.1_Without_JRE" >> $GITHUB_ENV
-
-      - name: Dry run
-        run: ./build.sh --dry-run --omegat-dir "$OMEGAT_DIR"
-
-      - name: Apply patch
-        run: ./build.sh --omegat-dir "$OMEGAT_DIR"
-
-      - name: Verify patch
-        run: ./verify.sh --omegat-dir "$OMEGAT_DIR"
+          wget -q https://github.com/omegat-org/omegat/releases/download/release-6_1_0/OmegaT_6.1.0.zip
+          unzip -q OmegaT_6.1.0.zip
+          echo "OMEGAT_DIR=$(ls -d OmegaT_* | head -1)" >> "$GITHUB_ENV"
+      - name: Compile .java
+        run: |
+          CP="$OMEGAT_DIR/OmegaT.jar"
+          for j in "$OMEGAT_DIR"/lib/*.jar; do CP="$CP:$j"; done
+          javac --release 8 -cp "$CP" -d /tmp/check-build \
+            patch/org/omegat/core/machinetranslators/DeepLTranslate.java
+      - name: Diff against committed .class
+        run: |
+          for f in /tmp/check-build/org/omegat/core/machinetranslators/DeepLTranslate*.class; do
+            name=$(basename "$f")
+            committed="patch/org/omegat/core/machinetranslators/$name"
+            if [ ! -f "$committed" ]; then
+              echo "FAIL: $name is not committed. Recompile and commit it."
+              exit 1
+            fi
+            if ! diff "$f" "$committed"; then
+              echo "FAIL: $name differs from compiled output."
+              echo "Recompile DeepLTranslate.java and commit the updated .class."
+              exit 1
+            fi
+          done
+          echo "PASS: Committed .class matches compiled output."
