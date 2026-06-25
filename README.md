@@ -9,7 +9,9 @@ Fixes the "403 Forbidden" error in OmegaT's DeepL translator.
 ./fix.sh                    # patch OmegaT
 ```
 
-The script finds OmegaT automatically. No JDK required.
+The script finds OmegaT automatically if it is in `/Applications/OmegaT.app`.
+If you launched OmegaT from a `.dmg` without installing it, drag it to `/Applications` first.
+No JDK required.
 
 ## Other modes
 
@@ -19,18 +21,9 @@ The script finds OmegaT automatically. No JDK required.
 ./fix.sh --undo --choose    # pick a specific backup
 ```
 
-## Backward compat
-
-```bash
-./build.sh                  # same as ./fix.sh
-./verify.sh                 # same as ./fix.sh --check
-./restore.sh                # same as ./fix.sh --undo
-```
-
 ## Files
 
 | File | Purpose |
 |---|---|
 | `fix.sh` | Main script (build, check, undo) |
-| `build.sh` / `verify.sh` / `restore.sh` | Wrappers around fix.sh |
 | `patch/` | Modified source + precompiled class |
