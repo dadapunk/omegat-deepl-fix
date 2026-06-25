@@ -1,212 +1,167 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
-log()  { echo -e "${GREEN}[*]${NC} $*"; }
-warn() { echo -e "${YELLOW}[!]${NC} $*"; }
-err()  { echo -e "${RED}[ERROR]${NC} $*" >&2; }
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
+ok()   { printf '%b→%b %s\n' "$GREEN" "$NC" "$*"; }
+warn() { printf '%b→%b %s\n' "$YELLOW" "$NC" "$*"; }
+err()  { printf '%b→%b %s\n' "$RED" "$NC" "$*" >&2; }
+die()  { err "$1"; exit 1; }
 
 DRY_RUN=""
-INSTALL_JDK=""
-POSITIONAL=()
 HELP=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --dry-run) DRY_RUN="1"; shift ;;
-        --install-jdk) INSTALL_JDK="1"; shift ;;
         --omegat-dir) OMEGAT_DIR="$2"; shift 2 ;;
         --help|-h) HELP="1"; shift ;;
-        *) POSITIONAL+=("$1"); shift ;;
+        *) die "Unknown option: $1" ;;
     esac
 done
 
-if [ -z "${OMEGAT_DIR:-}" ] && [ ${#POSITIONAL[@]} -gt 0 ]; then
-    OMEGAT_DIR="${POSITIONAL[0]}"
-fi
-
-# ---- Detect platform ----
 case "$(uname -s)" in
     Darwin) OS="macos" ;;
     Linux)  OS="linux" ;;
-    *)      err "Unsupported OS: $(uname -s)"; exit 1 ;;
+    *) die "Only macOS and Linux are supported." ;;
 esac
-
-# ---- Help ----
-if [ -n "${HELP:-}" ]; then
-    cat <<EOF
-Usage: $0 [OPTIONS] [--omegat-dir PATH]
-
-Options:
-  --omegat-dir PATH  Path to OmegaT directory (auto-detected if omitted)
-  --dry-run          Show what would be done without making changes
-  --install-jdk      Install JDK 17 if missing (macOS: Homebrew, Linux: dnf)
-  -h, --help         Show this help
-
-Auto-detected paths (when --omegat-dir is not given):
-  macOS:  /Applications/OmegaT.app/Contents/Java
-  Linux:  ~/.local/opt/omegat/OmegaT_*/, ~/omegat/OmegaT_*/,
-          /opt/omegat/OmegaT_*/, Flatpak
-
-Examples:
-  $0                                # auto-detect everything
-  $0 --dry-run                      # preview without changes
-  $0 --omegat-dir /path/to/OmegaT   # manual path
-  $0 --install-jdk                  # install JDK if missing
-EOF
-    exit 1
-fi
-
-# ---- Auto-detect OmegaT directory ----
-if [ -z "${OMEGAT_DIR:-}" ]; then
-    CANDIDATES=()
-
-    if [ "$OS" = "macos" ]; then
-        CANDIDATES+=("/Applications/OmegaT.app/Contents/Java")
-    fi
-
-    if [ "$OS" = "linux" ]; then
-        CANDIDATES+=($HOME/.local/opt/omegat/OmegaT_*)
-        CANDIDATES+=($HOME/omegat/OmegaT_*)
-        CANDIDATES+=(/opt/omegat/OmegaT_*)
-        FLATPAK_DIR="/var/lib/flatpak/app/org.omegat.OmegaT/current/active/files/omegat"
-        [ -d "$FLATPAK_DIR" ] && CANDIDATES+=("$FLATPAK_DIR")
-    fi
-
-    VALID=()
-    for d in "${CANDIDATES[@]}"; do
-        if [ -f "$d/OmegaT.jar" ] && [ -d "$d/lib" ]; then
-            VALID+=("$d")
-        fi
-    done
-
-    if [ ${#VALID[@]} -eq 0 ]; then
-        err "OmegaT not found. Install it manually or pass --omegat-dir."
-        exit 1
-    elif [ ${#VALID[@]} -eq 1 ]; then
-        OMEGAT_DIR="${VALID[0]}"
-        log "Auto-detected OmegaT: $OMEGAT_DIR"
-    else
-        echo -e "${YELLOW}Multiple OmegaT installations found:${NC}"
-        for i in "${!VALID[@]}"; do
-            echo "  [$((i+1))] ${VALID[$i]}"
-        done
-        read -rp "Select [1]: " choice
-        choice="${choice:-1}"
-        OMEGAT_DIR="${VALID[$((choice-1))]}"
-    fi
-fi
-
-# ---- JDK check ----
-ensure_jdk() {
-    if command -v javac >/dev/null 2>&1 && command -v jar >/dev/null 2>&1; then
-        log "JDK found: $(javac -version 2>&1)"
-        return 0
-    fi
-
-    if [ -z "${INSTALL_JDK:-}" ]; then
-        err "JDK 11+ required (javac + jar). Run with --install-jdk to auto-install,"
-        err "or install manually and ensure they are in PATH."
-        exit 1
-    fi
-
-    if [ "$OS" = "macos" ]; then
-        if ! command -v brew >/dev/null 2>&1; then
-            warn "Homebrew not found. Installing Homebrew first..."
-            if [ -z "$DRY_RUN" ]; then
-                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-                eval "$(/opt/homebrew/bin/brew shellenv)"
-            else
-                log "[DRY-RUN] Would install Homebrew"
-            fi
-        fi
-        log "Installing openjdk@17 via Homebrew..."
-        if [ -z "$DRY_RUN" ]; then
-            brew install openjdk@17
-            export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
-        else
-            log "[DRY-RUN] brew install openjdk@17"
-        fi
-    elif [ "$OS" = "linux" ]; then
-        if command -v dnf >/dev/null 2>&1; then
-            log "Installing java-17-openjdk-devel via dnf..."
-            if [ -z "$DRY_RUN" ]; then
-                sudo dnf install -y java-17-openjdk-devel
-            else
-                log "[DRY-RUN] sudo dnf install -y java-17-openjdk-devel"
-            fi
-        else
-            err "Auto-install not supported for your Linux distro."
-            err "Install JDK 11+ manually and ensure javac/jar are in PATH."
-            exit 1
-        fi
-    fi
-
-    if ! command -v javac >/dev/null 2>&1; then
-        err "JDK installation failed. Install JDK 11+ manually."
-        exit 1
-    fi
-    log "JDK ready: $(javac -version 2>&1)"
-}
-
-# ---- Validations ----
-[ -d "$OMEGAT_DIR" ]      || { err "Directory not found: $OMEGAT_DIR"; exit 1; }
-[ -f "$OMEGAT_DIR/OmegaT.jar" ] || { err "OmegaT.jar not found in $OMEGAT_DIR"; exit 1; }
-[ -d "$OMEGAT_DIR/lib" ]  || { err "lib/ not found in $OMEGAT_DIR"; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PATCH_FILE="$SCRIPT_DIR/patch/org/omegat/core/machinetranslators/DeepLTranslate.java"
-[ -f "$PATCH_FILE" ]      || { err "Patch source not found: $PATCH_FILE"; exit 1; }
+VERIFY_SCRIPT="$SCRIPT_DIR/verify.sh"
 
-if command -v lsof >/dev/null 2>&1 && lsof "$OMEGAT_DIR/OmegaT.jar" >/dev/null 2>&1; then
-    err "OmegaT is running. Close it before patching."
-    exit 1
-fi
+confirm() {
+    question="$1"
+    default="${2:-N}"
+    [ ! -t 0 ] && return 1
+    suffix="[y/N]"; [ "$default" = "Y" ] && suffix="[Y/n]"
+    printf '%s %s ' "$question" "$suffix"
+    read -r answer || true
+    case "${answer:-$default}" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
+}
 
-# ---- JDK (after validations, before plan) ----
+select_number() {
+    default="${1:-1}"
+    [ ! -t 0 ] && { printf '%s\n' "$default"; return 0; }
+    printf 'Choose [%s]: ' "$default"
+    read -r choice || true
+    printf '%s\n' "${choice:-$default}"
+}
+
+detect_omegat_dir() {
+    [ -n "${OMEGAT_DIR:-}" ] && return 0
+    candidates=()
+    if [ "$OS" = "macos" ]; then
+        [ -d "/Applications/OmegaT.app/Contents/Java" ] && candidates+=("/Applications/OmegaT.app/Contents/Java")
+    else
+        for path in "$HOME/.local/opt/omegat"/OmegaT_* "$HOME/omegat"/OmegaT_* "/opt/omegat"/OmegaT_*; do
+            [ -d "$path" ] && candidates+=("$path")
+        done
+        flatpak_dir="/var/lib/flatpak/app/org.omegat.OmegaT/current/active/files/omegat"
+        [ -d "$flatpak_dir" ] && candidates+=("$flatpak_dir")
+    fi
+    valid=()
+    for path in "${candidates[@]}"; do
+        [ -f "$path/OmegaT.jar" ] && [ -d "$path/lib" ] && valid+=("$path")
+    done
+    [ ${#valid[@]} -gt 0 ] || die "OmegaT not found. Open OmegaT once and run again."
+    if [ ${#valid[@]} -eq 1 ]; then
+        OMEGAT_DIR="${valid[0]}"
+        ok "OmegaT detected"
+        return 0
+    fi
+    warn "Multiple copies of OmegaT found:"
+    for i in "${!valid[@]}"; do
+        printf '  [%s] %s\n' "$((i + 1))" "${valid[$i]}"
+    done
+    idx="$(select_number 1)"
+    case "$idx" in ''|*[!0-9]*) die "Invalid choice." ;; esac
+    [ "$idx" -ge 1 ] && [ "$idx" -le "${#valid[@]}" ] || die "Invalid choice."
+    OMEGAT_DIR="${valid[$((idx - 1))]}"
+    ok "OmegaT detected"
+}
+
+ensure_jdk() {
+    command -v javac >/dev/null 2>&1 && command -v jar >/dev/null 2>&1 && { ok "Java ready"; return 0; }
+    [ -n "$DRY_RUN" ] && { warn "Java not found (skipping, dry run)"; return 0; }
+    if [ "$OS" = "macos" ]; then
+        if ! command -v brew >/dev/null 2>&1; then
+            confirm "Install Homebrew (needed for Java)?" "N" || die "Install Homebrew and run again."
+            ok "Installing Homebrew..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            [ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"
+            [ -x /usr/local/bin/brew ] && eval "$(/usr/local/bin/brew shellenv)"
+        fi
+        confirm "Install Java 17 now?" "Y" || die "Install Java and run again."
+        ok "Installing Java..."
+        brew install openjdk@17
+        [ -d /opt/homebrew/opt/openjdk@17/bin ] && export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
+        [ -d /usr/local/opt/openjdk@17/bin ] && export PATH="/usr/local/opt/openjdk@17/bin:$PATH"
+    elif command -v dnf >/dev/null 2>&1; then
+        confirm "Install Java with dnf?" "Y" || die "Install Java and run again."
+        sudo dnf install -y java-17-openjdk-devel
+    else
+        die "Java not found. Install Java 11+ and run again."
+    fi
+    command -v javac >/dev/null 2>&1 && command -v jar >/dev/null 2>&1 || die "Java install failed."
+    ok "Java ready"
+}
+
+show_help() {
+    cat <<EOF
+Usage: $0 [--dry-run] [--omegat-dir PATH]
+
+Options:
+  --omegat-dir PATH  OmegaT location (auto-detected if omitted)
+  --dry-run          Preview without changing anything
+  -h, --help         Show this help
+
+Examples:
+  $0              Patch OmegaT
+  $0 --dry-run    Preview first
+EOF
+}
+
+[ -n "$HELP" ] && { show_help; exit 0; }
+[ -z "$DRY_RUN" ] && [ -t 0 ] && { printf '\nPress Enter to start, or Ctrl+C to cancel.'; read -r _; }
+
+detect_omegat_dir
+[ -d "$OMEGAT_DIR" ] || die "OmegaT folder not found"
+[ -f "$OMEGAT_DIR/OmegaT.jar" ] || die "OmegaT.jar not found"
+[ -d "$OMEGAT_DIR/lib" ] || die "OmegaT appears incomplete"
+[ -f "$PATCH_FILE" ] || die "Patch file missing"
+command -v lsof >/dev/null 2>&1 && lsof "$OMEGAT_DIR/OmegaT.jar" >/dev/null 2>&1 && die "OmegaT is open. Close it and run again."
+
 echo ""
 ensure_jdk
 
-# ---- Classpath ----
 CLASSPATH="$OMEGAT_DIR/OmegaT.jar"
 for jar in "$OMEGAT_DIR"/lib/*.jar; do
+    [ -e "$jar" ] || continue
     CLASSPATH="$CLASSPATH:$jar"
 done
 
-# ---- Plan ----
 echo ""
-echo -e "${CYAN}Plan:${NC}"
-echo "  OS:        $OS"
-echo "  OmegaT:    $OMEGAT_DIR"
-echo "  JDK:       $(javac -version 2>&1)"
-echo "  Backup:    OmegaT.jar.bak.<timestamp>"
-echo "  Compile:   javac -cp ... $(basename "$PATCH_FILE")"
-echo "  Patch:     jar uf OmegaT.jar .../DeepLTranslate.class"
-echo "  Verify:    jar tf OmegaT.jar | grep DeepLTranslate.class"
-
-if [ -n "$DRY_RUN" ]; then
+if "$VERIFY_SCRIPT" --omegat-dir "$OMEGAT_DIR"; then
     echo ""
-    log "DRY RUN complete — no changes were made."
+    ok "OmegaT is already patched. Nothing to do."
     exit 0
 fi
 
-# ---- Execute ----
+ok "Steps: 1. Backup  2. Apply fix  3. Verify"
+
+[ -n "$DRY_RUN" ] && { echo ""; ok "Dry run done. No changes made."; exit 0; }
+
 BACKUP="$OMEGAT_DIR/OmegaT.jar.bak.$(date +%Y%m%d%H%M%S)"
 cp "$OMEGAT_DIR/OmegaT.jar" "$BACKUP"
-log "Backup created: $BACKUP"
+ok "Backup saved"
 
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
-
 cp -r "$SCRIPT_DIR/patch"/* "$TMPDIR/"
 javac -cp "$CLASSPATH" "$TMPDIR"/org/omegat/core/machinetranslators/DeepLTranslate.java
-
-CLASS_FILE="$TMPDIR/org/omegat/core/machinetranslators/DeepLTranslate.class"
-[ -f "$CLASS_FILE" ] || { err "Compilation failed (no .class produced)"; exit 1; }
-
+[ -f "$TMPDIR/org/omegat/core/machinetranslators/DeepLTranslate.class" ] || die "Build failed."
 jar uf "$OMEGAT_DIR/OmegaT.jar" -C "$TMPDIR" org/omegat/core/machinetranslators/DeepLTranslate.class
 
-jar tf "$OMEGAT_DIR/OmegaT.jar" | grep -q "DeepLTranslate.class" \
-    || { err "Patch verification failed"; exit 1; }
-
-log "Done! DeepLTranslate patched successfully."
+"$VERIFY_SCRIPT" --omegat-dir "$OMEGAT_DIR"
+echo ""
+ok "Done. OmegaT is ready."

@@ -1,72 +1,78 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
+ok()   { printf '%b→%b %s\n' "$GREEN" "$NC" "$*"; }
+die()  { printf '%b→%b %s\n' "$RED" "$NC" "$*" >&2; exit 1; }
+
+case "$(uname -s)" in
+    Darwin) OS="macos" ;;
+    Linux)  OS="linux" ;;
+    *) die "Only macOS and Linux are supported." ;;
+esac
+
+detect_omegat_dir() {
+    [ -n "${OMEGAT_DIR:-}" ] && return 0
+    candidates=()
+    if [ "$OS" = "macos" ]; then
+        [ -d "/Applications/OmegaT.app/Contents/Java" ] && candidates+=("/Applications/OmegaT.app/Contents/Java")
+    else
+        for path in "$HOME/.local/opt/omegat"/OmegaT_* "$HOME/omegat"/OmegaT_* "/opt/omegat"/OmegaT_*; do
+            [ -d "$path" ] && candidates+=("$path")
+        done
+        flatpak_dir="/var/lib/flatpak/app/org.omegat.OmegaT/current/active/files/omegat"
+        [ -d "$flatpak_dir" ] && candidates+=("$flatpak_dir")
+    fi
+    for path in "${candidates[@]}"; do
+        [ -f "$path/OmegaT.jar" ] && [ -d "$path/lib" ] && { OMEGAT_DIR="$path"; return 0; }
+    done
+    die "OmegaT not found. Open OmegaT once and run again."
+}
+
 if [ "${1:-}" = "--omegat-dir" ] && [ -n "${2:-}" ]; then
     OMEGAT_DIR="$2"
+    shift 2
+fi
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            echo "Usage: $0 [--omegat-dir PATH]"
+            echo "Auto-detects OmegaT if no path is given."
+            exit 0
+            ;;
+        *) die "Unknown option: $1" ;;
+    esac
+    shift
+done
+
+detect_omegat_dir
+[ -f "$OMEGAT_DIR/OmegaT.jar" ] || die "OmegaT.jar not found"
+
+ok "Checking..."
+jar tf "$OMEGAT_DIR/OmegaT.jar" | grep -q "DeepLTranslate.class" || die "DeepL component missing from OmegaT"
+
+CLASS_DUMP=$(javap -classpath "$OMEGAT_DIR/OmegaT.jar" -verbose org.omegat.core.machinetranslators.DeepLTranslate)
+
+if printf '%s\n' "$CLASS_DUMP" | grep -q "api-free.deepl.com"; then
+    printf '  → API: v2 endpoint (fixed)\n'
+elif printf '%s\n' "$CLASS_DUMP" | grep -q "api.deepl.com/v1"; then
+    die "API: v1 endpoint still present (not fixed)"
 else
-    OMEGAT_DIR="${OMEGAT_DIR:-${1:-}}"
+    printf '  → API: custom host\n'
 fi
 
-if [ -z "$OMEGAT_DIR" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    echo "Usage: $0 --omegat-dir /path/to/OmegaT"
-    echo "   or: OMEGAT_DIR=/path/to/OmegaT $0"
-    exit 1
-fi
-
-if [ ! -f "$OMEGAT_DIR/OmegaT.jar" ]; then
-    echo "FAIL: OmegaT.jar not found at $OMEGAT_DIR/OmegaT.jar"
-    exit 1
-fi
-
-echo "[*] Checking OmegaT.jar for patched DeepLTranslate class..."
-
-if jar tf "$OMEGAT_DIR/OmegaT.jar" | grep -q "DeepLTranslate.class"; then
-    echo "  - DeepLTranslate.class: present"
+if printf '%s\n' "$CLASS_DUMP" | grep -q "DeepL-Auth-Key"; then
+    printf '  → Auth: header (fixed)\n'
 else
-    echo "FAIL: DeepLTranslate.class missing from OmegaT.jar"
-    exit 1
+    die "Auth: header missing (not fixed)"
 fi
 
-TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
-
-cd "$TMPDIR"
-jar xf "$OMEGAT_DIR/OmegaT.jar" org/omegat/core/machinetranslators/DeepLTranslate.class
-
-CLASS_FILE="org/omegat/core/machinetranslators/DeepLTranslate.class"
-
-# Check for v2 endpoint string in the class
-if strings "$CLASS_FILE" | grep -q "api-free.deepl.com"; then
-    echo "  - API host: api-free.deepl.com (patched, default)"
-elif strings "$CLASS_FILE" | grep -q "api.deepl.com/v1"; then
-    echo "  - API: ORIGINAL v1 endpoint (not patched)"
-    exit 1
+if printf '%s\n' "$CLASS_DUMP" | grep -q "Mozilla/5.0"; then
+    printf '  → Agent: browser-style (fixed)\n'
 else
-    echo "  - API host: custom (set via DEEPL_API_HOST)"
-fi
-
-# Check for Authorization header
-if strings "$CLASS_FILE" | grep -q "DeepL-Auth-Key"; then
-    echo "  - Auth method: Authorization header (patched)"
-else
-    echo "  - Auth method: ORIGINAL (not patched)"
-    exit 1
-fi
-
-# Check for User-Agent
-if strings "$CLASS_FILE" | grep -q "Mozilla/5.0"; then
-    echo "  - User-Agent: browser-style (patched)"
-else
-    echo "  - User-Agent: ORIGINAL (not patched)"
-    exit 1
+    die "Agent: browser-style missing (not fixed)"
 fi
 
 echo ""
-echo "PASS: OmegaT.jar is patched with the DeepL v2 fix."
-
-echo ""
-echo "To test the translation API directly:"
-echo "  curl -s -X POST \"https://api-free.deepl.com/v2/translate\" \\"
-echo "    -H \"Authorization: DeepL-Auth-Key \\\$DEEPL_API_KEY\" \\"
-echo "    -H \"Content-Type: application/json\" \\"
-echo "    -d '{\"text\":[\"Hello world\"],\"target_lang\":\"ES\"}'"
+ok "OmegaT is ready."

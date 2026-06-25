@@ -2,39 +2,35 @@
 
 [![CI](https://github.com/dadapunk/omegat-deepl-fix/actions/workflows/ci.yml/badge.svg)](https://github.com/dadapunk/omegat-deepl-fix/actions/workflows/ci.yml)
 
-Patches OmegaT's `DeepLTranslate` to use API v2, fixing `403 Forbidden` on Free (`:fx`) keys.
+Fixes the "403 Forbidden" error in OmegaT's DeepL translator.
 
 ## Quick start
 
 ```bash
-git clone https://github.com/dadapunk/omegat-deepl-fix.git && cd omegat-deepl-fix
-./build.sh --dry-run            # preview (auto-detects OmegaT)
-./build.sh                      # apply the patch
+./build.sh --dry-run          # preview
+./build.sh                    # patch OmegaT
 ```
 
-If auto-detect fails, pass the path manually:
+The script finds OmegaT automatically. Press Enter to start.
+
+## Restore
+
 ```bash
-./build.sh --omegat-dir /Applications/OmegaT.app/Contents/Java
+./restore.sh                  # undo the patch
+./restore.sh --choose         # pick a specific backup
 ```
 
-Then in OmegaT: **Options → Preferences → Machine Translation** → enable DeepL, paste your API key.
+## Verify
 
-Run `./build.sh --help` for all options. Add `--install-jdk` to auto-install Java if missing.
-
-## Disclaimer
-
-Dev/experimental only. Free (`:fx`) keys aren't licensed for CAT tools —
-purchase a [DeepL plan](https://www.deepl.com/pro#developer) for professional use.
+```bash
+./verify.sh                   # check if OmegaT is patched
+```
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `build.sh` | Apply the patch (creates backup, compiles, patches, verifies) |
-| `restore.sh` | Restore `OmegaT.jar` from backup |
-| `verify.sh` | Confirm the patch is applied |
-| `patch/.../DeepLTranslate.java` | Modified source (GPL-3.0) |
-
-## License
-
-GPL-3.0 — same as OmegaT.
+| `build.sh` | Patch OmegaT |
+| `restore.sh` | Restore from backup |
+| `verify.sh` | Check patch status |
+| `patch/` | Modified source code |
